@@ -1,0 +1,10 @@
+[package]
+name = "gitqlite"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.86"
+clap = { version = "4.5.8", features = ["derive"] }
+log = "0.4.22"
+rusqlite = {version = "0.31.0", features = ["bundled"]}
