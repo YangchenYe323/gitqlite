@@ -1,88 +1,22 @@
 //! This module provides actual implementations of the git operations.
 
-use std::{fs, path::Path};
+use std::{fs, io::Read, path::Path};
 
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use ini::Ini;
 use model::{
-    CREATE_BLOB_TABLE, CREATE_COMMIT_TABLE, CREATE_HEAD_TABLE, CREATE_REF_TABLE, CREATE_TREE_TABLE,
+    Blob, Commit, Hashable, Sha1Id, Tree, CREATE_BLOB_TABLE, CREATE_COMMIT_TABLE,
+    CREATE_HEAD_TABLE, CREATE_REF_TABLE, CREATE_TREE_TABLE,
 };
 use rusqlite::Connection;
+use sha1::Digest;
+use utils::get_gitqlite_connection;
 
-use crate::cli::InitArgs;
+use crate::cli::{CatFileArgs, HashObjectArgs, InitArgs, ObjectType};
 
-mod model {
-    //! This module implements the interface between gitqlite models and the sqlite database.
-    //! Hash compute algorithm:
-    //! 1. The hash of a glob (glob_id) is the SHA256 of the file content.
-    //! 2. The hash of a tree (tree_id) is the SHA256 of the tree data.
-    //! 3. The hash of a commit (commit_id) is the SHA256 of the content built by joining all the fields with "\n".
-
-    /// HEAD points to a ref
-    pub const CREATE_HEAD_TABLE: &str = "CREATE TABLE Head (ref_name TEXT);";
-    /// Ref points to a commit
-    pub const CREATE_REF_TABLE: &str =
-        "CREATE TABLE Refs (ref_name TEXT PRIMARY KEY, commit_id TEXT);";
-    /// Commit points to a tree and contains a set of metadata
-    pub const CREATE_COMMIT_TABLE: &str = "CREATE TABLE Commits (commit_id TEXT PRIMARY KEY, tree_id TEXT, author_name TEXT, author_email TEXT, committer_name TEXT, committer_email TEXT, message TEXT);";
-    /// Tree points to a list of other trees (subdirectories) and blobs (file contents) and maintains their symbolic names
-    /// This data is encoded as a newline-separated text following the original git file format, where each line is of format
-    /// <file_mode> <file_type[blob|tree]> <object_id[tree_id|blob_id]> <file_name>
-    pub const CREATE_TREE_TABLE: &str = "CREATE TABLE Trees (tree_id TEXT PRIMARY KEY, data TEXT);";
-    /// Blob stores actual file content
-    pub const CREATE_BLOB_TABLE: &str = "CREATE TABLE Blobs (blob_id TEXT, data BLOB);";
-
-    #[derive(Debug)]
-    pub struct Head(String);
-
-    #[derive(Debug)]
-    pub struct Ref {
-        pub name: String,
-        pub commit_id: String,
-    }
-
-    #[derive(Debug)]
-    pub struct Commit {
-        pub commit_id: String,
-        pub tree_id: String,
-        pub author_name: String,
-        pub author_email: String,
-        pub committer_name: String,
-        pub committer_email: String,
-        pubmessage: String,
-    }
-
-    #[derive(Debug)]
-    pub struct Tree {
-        pub tree_id: String,
-    }
-
-    #[derive(Debug)]
-    pub enum TreeEntryType {
-        Blob,
-        Tree,
-    }
-
-    #[derive(Debug)]
-    pub struct TreeEntry {
-        pub type_: TreeEntryType,
-        pub id: String,
-        // ? We don't currently use mode yet, and haven't settled on how mode is going to be represented
-        mode: String,
-        pub name: String,
-    }
-
-    #[derive(Debug)]
-    pub struct Blob {
-        pub blob_id: String,
-        pub data: Vec<u8>,
-    }
-}
-
-mod constants {
-    pub const GITQLITE_DIRECTORY_PREFIX: &str = ".gitqlite";
-    pub const GITQLITE_DB_NAME: &str = "gitqlite.db";
-}
+mod constants;
+mod model;
+mod utils;
 
 pub fn do_init(_arg: InitArgs) -> crate::Result<()> {
     let pwd = std::env::current_dir()?;
@@ -119,6 +53,94 @@ pub fn do_init(_arg: InitArgs) -> crate::Result<()> {
         )
     }
 
+    Ok(())
+}
+
+pub fn do_cat_file(arg: CatFileArgs) -> crate::Result<()> {
+    let CatFileArgs { type_, object } = arg;
+    let conn = get_gitqlite_connection()?;
+
+    let object_id = object.as_str().try_into()?;
+
+    match type_ {
+        crate::cli::ObjectType::Blob => print_blob(&conn, object_id),
+        crate::cli::ObjectType::Tree => print_tree(&conn, object_id),
+        crate::cli::ObjectType::Commit => print_commit(&conn, object_id),
+    }
+}
+
+pub fn do_hash_object(arg: HashObjectArgs) -> crate::Result<()> {
+    let HashObjectArgs { type_, write, file } = arg;
+    let conn = get_gitqlite_connection()?;
+
+    match type_ {
+        ObjectType::Blob => {
+            let blob = construct_blob_from_file(&file)?;
+            if write {
+                blob.persist(&conn)?;
+            }
+            println!("ID for {}: {}", file.display(), blob.blob_id);
+        }
+        _ => unimplemented!(),
+    }
+
+    Ok(())
+}
+
+fn construct_blob_from_file(path: impl AsRef<Path>) -> crate::Result<Blob<Sha1Id>> {
+    let path = path.as_ref();
+
+    if !path.is_file() {
+        return Err(anyhow!(
+            "Could not hash a non-file path to a blob: {}",
+            path.display()
+        ));
+    }
+
+    let data = {
+        let mut f = fs::File::open(path)?;
+        let mut buffer = Vec::with_capacity(1024);
+        f.read_to_end(&mut buffer)?;
+        buffer
+    };
+
+    let blob = Blob::new(data);
+
+    let blob_id = blob.hash(sha1::Sha1::new());
+
+    Ok(blob.with_id(blob_id))
+}
+
+fn print_blob(conn: &Connection, blob_id: Sha1Id) -> crate::Result<()> {
+    let blob = Blob::read_from_conn_with_id(conn, blob_id)?;
+    println!("{}", String::from_utf8_lossy(&blob.data));
+    Ok(())
+}
+
+fn print_tree(conn: &Connection, tree_id: Sha1Id) -> crate::Result<()> {
+    let tree = Tree::read_from_conn_with_id(conn, tree_id)?;
+
+    for entry in &tree.entries {
+        println!("{} {}    {}", entry.type_, entry.id, entry.name);
+    }
+
+    Ok(())
+}
+
+fn print_commit(conn: &Connection, commit_id: Sha1Id) -> crate::Result<()> {
+    let commit = Commit::read_from_conn_with_id(conn, commit_id)?;
+    println!("tree {}", commit.tree_id);
+    for parent in &commit.parent_ids {
+        println!("parent {}", parent);
+    }
+    println!("author {} <{}>", commit.author_name, commit.author_email);
+    println!(
+        "committer {} <{}>",
+        commit.committer_name, commit.committer_email
+    );
+    println!();
+    println!("{}", commit.message);
+    println!();
     Ok(())
 }
 

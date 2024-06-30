@@ -9,3 +9,4 @@ clap = { version = "4.5.8", features = ["derive"] }
 log = "0.4.22"
 rusqlite = {version = "0.31.0", features = ["bundled"]}
 rust-ini = "0.21.0"
+sha1 = "0.10.6"
