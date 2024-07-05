@@ -21,6 +21,10 @@ pub enum GitCommand {
     /// Compute object ID and optionally create an object from a file
     #[command(subcommand_value_name = "hash-object")]
     HashObject(HashObjectArgs),
+
+    /// Show content of the staging area
+    #[command(subcommand_value_name = "ls-files")]
+    LsFiles(LsFilesArgs),
 }
 
 #[derive(Args, Clone)]
@@ -57,4 +61,11 @@ pub struct HashObjectArgs {
 
     /// Path of local file/directory to create an object for
     pub file: PathBuf,
+}
+
+#[derive(Args, Clone)]
+pub struct LsFilesArgs {
+    /// Show verbose output of the staged files
+    #[arg(long, short)]
+    pub verbose: bool,
 }

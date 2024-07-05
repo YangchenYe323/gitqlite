@@ -5,6 +5,7 @@
 //! 3. The hash of a commit (commit_id) is the SHA256 of the content built by joining all the fields with "\n".
 
 use anyhow::{anyhow, Context};
+use serde::{Deserialize, Serialize};
 use sha1::{self, Digest};
 use std::fmt;
 
@@ -154,7 +155,7 @@ impl<T> IdType<T> for NoId {
 }
 
 /// The canonical ID type used for all git objects, which is a SHA1 hash byte array
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Sha1Id([u8; 20]);
 
 impl fmt::Display for Sha1Id {
