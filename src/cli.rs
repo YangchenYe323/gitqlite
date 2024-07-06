@@ -15,16 +15,16 @@ pub enum GitCommand {
     Init(InitArgs),
 
     /// Provide contents or details of repository objects
-    #[command(subcommand_value_name = "cat-file")]
     CatFile(CatFileArgs),
 
     /// Compute object ID and optionally create an object from a file
-    #[command(subcommand_value_name = "hash-object")]
     HashObject(HashObjectArgs),
 
     /// Show content of the staging area
-    #[command(subcommand_value_name = "ls-files")]
     LsFiles(LsFilesArgs),
+
+    /// Check whether the file is excluded by .gitignore (or other input files to the exclude mechanism) and output the path if it is excluded.
+    CheckIgnore(CheckIgnoreArgs),
 }
 
 #[derive(Args, Clone)]
@@ -68,4 +68,10 @@ pub struct LsFilesArgs {
     /// Show verbose output of the staged files
     #[arg(long, short)]
     pub verbose: bool,
+}
+
+#[derive(Args, Clone)]
+pub struct CheckIgnoreArgs {
+    /// The pathname to check whether the path is excluded by gitqlite
+    pub path: PathBuf,
 }

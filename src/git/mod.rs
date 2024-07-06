@@ -5,6 +5,7 @@ use std::{fs, io::Read, path::Path};
 use anyhow::{anyhow, Context};
 use chrono::DateTime;
 use constants::GITQLITE_INDEX_FILE;
+use ignore::{check_gitignore, gitignore_read};
 use index::{Index, ModeType};
 use ini::Ini;
 use model::{
@@ -15,9 +16,10 @@ use rusqlite::Connection;
 use sha1::Digest;
 use utils::{find_gitqlite_root, get_gitqlite_connection};
 
-use crate::cli::{CatFileArgs, HashObjectArgs, InitArgs, LsFilesArgs, ObjectType};
+use crate::cli::{CatFileArgs, CheckIgnoreArgs, HashObjectArgs, InitArgs, LsFilesArgs, ObjectType};
 
 mod constants;
+mod ignore;
 mod index;
 mod model;
 mod utils;
@@ -127,6 +129,16 @@ pub fn do_ls_files(arg: LsFilesArgs) -> crate::Result<()> {
                 entry.flag_stage, entry.flag_assume_valid
             );
         }
+    }
+
+    Ok(())
+}
+
+pub fn do_check_ignore(arg: CheckIgnoreArgs) -> crate::Result<()> {
+    let gitignore = gitignore_read()?;
+
+    if check_gitignore(&gitignore, &arg.path) {
+        println!("{}", arg.path.display());
     }
 
     Ok(())
