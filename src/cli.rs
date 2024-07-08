@@ -25,6 +25,12 @@ pub enum GitCommand {
 
     /// Check whether the file is excluded by .gitignore (or other input files to the exclude mechanism) and output the path if it is excluded.
     CheckIgnore(CheckIgnoreArgs),
+
+    /// Show the working tree status
+    Status(StatusArgs),
+
+    /// Get and set repository or global options
+    Config(ConfigArgs),
 }
 
 #[derive(Args, Clone)]
@@ -74,4 +80,32 @@ pub struct LsFilesArgs {
 pub struct CheckIgnoreArgs {
     /// The pathname to check whether the path is excluded by gitqlite
     pub path: PathBuf,
+}
+
+#[derive(Args, Clone)]
+pub struct StatusArgs {}
+
+#[derive(Args, Clone)]
+pub struct ConfigArgs {
+    /// config entry name (e.g., user.email)
+    pub name: String,
+
+    /// config entry value (get config entry if none)
+    pub value: Option<String>,
+
+    /// show origin of config (file)
+    #[arg(long)]
+    pub show_origin: bool,
+
+    /// use system config file
+    #[arg(long)]
+    pub system: bool,
+
+    /// use global config file
+    #[arg(long)]
+    pub global: bool,
+
+    /// use repository config file
+    #[arg(long)]
+    pub local: bool,
 }

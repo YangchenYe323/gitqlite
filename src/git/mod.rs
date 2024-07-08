@@ -4,10 +4,10 @@ use std::{fs, io::Read, path::Path};
 
 use anyhow::{anyhow, Context};
 use chrono::DateTime;
-use constants::GITQLITE_INDEX_FILE;
+use config::initialize_default_config;
+use constants::{GITQLITE_DIRECTORY_PREFIX, GITQLITE_INDEX_FILE};
 use ignore::{check_gitignore, gitignore_read};
 use index::{Index, ModeType};
-use ini::Ini;
 use model::{
     Blob, Commit, Hashable, Sha1Id, Tree, CREATE_BLOB_TABLE, CREATE_COMMIT_TABLE,
     CREATE_HEAD_TABLE, CREATE_REF_TABLE, CREATE_TREE_TABLE,
@@ -16,8 +16,11 @@ use rusqlite::Connection;
 use sha1::Digest;
 use utils::{find_gitqlite_root, get_gitqlite_connection};
 
-use crate::cli::{CatFileArgs, CheckIgnoreArgs, HashObjectArgs, InitArgs, LsFilesArgs, ObjectType};
+use crate::cli::{
+    CatFileArgs, CheckIgnoreArgs, ConfigArgs, HashObjectArgs, InitArgs, LsFilesArgs, ObjectType,
+};
 
+mod config;
 mod constants;
 mod ignore;
 mod index;
@@ -116,8 +119,8 @@ pub fn do_ls_files(arg: LsFilesArgs) -> crate::Result<()> {
             let mtime = DateTime::from_timestamp_nanos(entry.mtime);
             println!(
                 "    created on {}, last modified on {}",
-                ctime.format("%Y-%m-%d %H:%M:%S.%f").to_string(),
-                mtime.format("%Y-%m-%d %H:%M:%S.%f").to_string()
+                ctime.format("%Y-%m-%d %H:%M:%S.%f"),
+                mtime.format("%Y-%m-%d %H:%M:%S.%f")
             );
 
             println!("    device {}, inode {}", entry.dev, entry.ino);
@@ -142,6 +145,88 @@ pub fn do_check_ignore(arg: CheckIgnoreArgs) -> crate::Result<()> {
     }
 
     Ok(())
+}
+
+pub fn do_config(arg: ConfigArgs) -> crate::Result<()> {
+    let ConfigArgs {
+        name,
+        value,
+        show_origin,
+        system,
+        global,
+        local,
+    } = arg;
+
+    let repo_root = find_gitqlite_root(std::env::current_dir()?)?;
+    let gitqlite_home = repo_root.join(GITQLITE_DIRECTORY_PREFIX);
+
+    match (system, global, local) {
+        (true, false, false) => {
+            if let Some(value) = value {
+                config::set_system_config(&name, value)
+            } else {
+                let value = config::get_system_config(&name)?;
+                if let Some((value, origin)) = value {
+                    if show_origin {
+                        println!("{}    {}", origin, value);
+                    } else {
+                        println!("{}", value);
+                    }
+                }
+
+                Ok(())
+            }
+        }
+        (false, true, false) => {
+            if let Some(value) = value {
+                config::set_global_config(&name, value)
+            } else {
+                let value = config::get_global_config(&name)?;
+                if let Some((value, origin)) = value {
+                    if show_origin {
+                        println!("{}    {}", origin, value);
+                    } else {
+                        println!("{}", value);
+                    }
+                }
+
+                Ok(())
+            }
+        }
+        (false, false, true) => {
+            if let Some(value) = value {
+                config::set_local_config(&gitqlite_home, &name, value)
+            } else {
+                let value = config::get_local_config(&gitqlite_home, &name)?;
+                if let Some((value, origin)) = value {
+                    if show_origin {
+                        println!("{}    {}", origin, value);
+                    } else {
+                        println!("{}", value);
+                    }
+                }
+
+                Ok(())
+            }
+        }
+        (false, false, false) => {
+            if let Some(value) = value {
+                config::set_local_config(&gitqlite_home, &name, value)
+            } else {
+                let value = config::get_config_all(&gitqlite_home, &name)?;
+                if let Some((value, origin)) = value {
+                    if show_origin {
+                        println!("{}    {}", origin, value);
+                    } else {
+                        println!("{}", value);
+                    }
+                }
+
+                Ok(())
+            }
+        }
+        _ => Err(anyhow!("error: only one config file at a time")),
+    }
 }
 
 fn construct_blob_from_file(path: impl AsRef<Path>) -> crate::Result<Blob<Sha1Id>> {
@@ -213,22 +298,4 @@ fn initialize_gitqlite_tables(conn: &Connection) -> crate::Result<()> {
     conn.execute(CREATE_BLOB_TABLE, ())
         .context("Create Blob table")?;
     Ok(())
-}
-
-fn initialize_default_config(gitqlite_home: impl AsRef<Path>) -> crate::Result<()> {
-    let config = default_gitqlite_config();
-    let config_path = gitqlite_home.as_ref().join("config");
-    config
-        .write_to_file(config_path)
-        .context("Write config file")?;
-    Ok(())
-}
-
-fn default_gitqlite_config() -> Ini {
-    let mut conf = Ini::new();
-    conf.with_section(Some("core"))
-        .set("repositoryformatversion", "0")
-        .set("filemode", "false")
-        .set("bare", "false");
-    conf
 }

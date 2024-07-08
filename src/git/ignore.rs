@@ -34,9 +34,7 @@ pub enum IgnoreRule {
 pub fn gitignore_parse_one(s: &str) -> Option<IgnoreRule> {
     let s = s.trim();
 
-    let Some(first_char) = s.chars().next() else {
-        return None;
-    };
+    let first_char = s.chars().next()?;
 
     match first_char {
         '!' => Some(IgnoreRule::Negate(s[1..].to_string())),
@@ -75,8 +73,7 @@ pub fn gitignore_read() -> crate::Result<GitIgnore> {
     let mut stack = Vec::new();
     stack.push(repo_root);
 
-    while !stack.is_empty() {
-        let current_dir = stack.pop().unwrap();
+    while let Some(current_dir) = stack.pop() {
         let gitignore_file = current_dir.join(".gitignore");
 
         // If there is a .gitignore file in the current directory
@@ -131,8 +128,7 @@ fn check_gitignore_one(
                 let full_pat = dir.join(pat);
 
                 // TODO: we assume paths are valid UTF-8 string here. Could we drop the assumption?
-                let Ok(paths) = glob::glob(&full_pat.as_path().as_os_str().to_str().unwrap())
-                else {
+                let Ok(paths) = glob::glob(full_pat.as_path().as_os_str().to_str().unwrap()) else {
                     log::warn!(
                         "Skipping malformed gitignore entry {}:{}",
                         dir.display(),
@@ -152,8 +148,7 @@ fn check_gitignore_one(
                 let full_pat = dir.join(pat);
 
                 // TODO: we assume paths are valid UTF-8 string here. Could we drop the assumption?
-                let Ok(paths) = glob::glob(&full_pat.as_path().as_os_str().to_str().unwrap())
-                else {
+                let Ok(paths) = glob::glob(full_pat.as_path().as_os_str().to_str().unwrap()) else {
                     log::warn!(
                         "Skipping malformed gitignore entry {}:{}",
                         dir.display(),

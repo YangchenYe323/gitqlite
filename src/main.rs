@@ -1,5 +1,5 @@
 use clap::Parser;
-use git::{do_cat_file, do_check_ignore, do_hash_object, do_init, do_ls_files};
+use git::{do_cat_file, do_check_ignore, do_config, do_hash_object, do_init, do_ls_files};
 
 mod cli;
 mod git;
@@ -15,5 +15,7 @@ fn main() -> Result<()> {
         cli::GitCommand::HashObject(arg) => do_hash_object(arg),
         cli::GitCommand::LsFiles(arg) => do_ls_files(arg),
         cli::GitCommand::CheckIgnore(arg) => do_check_ignore(arg),
+        cli::GitCommand::Config(arg) => do_config(arg),
+        _ => unimplemented!(),
     }
 }
