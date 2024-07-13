@@ -62,7 +62,10 @@ fn get_current_head(gitqlite_home: impl AsRef<Path>) -> crate::Result<Head> {
 fn print_status_branch(head: &Head) {
     match head {
         Head::Branch(name) => {
-            println!("On branch {}", name.strip_prefix(constants::BRANCH_PREFIX).unwrap())
+            println!(
+                "On branch {}",
+                name.strip_prefix(constants::BRANCH_PREFIX).unwrap()
+            )
         }
         Head::Commit(id) => {
             println!("Head detached at {}", id)
