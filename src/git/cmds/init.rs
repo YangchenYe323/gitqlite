@@ -1,10 +1,12 @@
 use std::fs;
+use std::io::Write;
+use std::path::Path;
 
 use anyhow::Context;
 use rusqlite::Connection;
 
 use crate::cli::InitArgs;
-use crate::git::config::initialize_default_config;
+use crate::git::config::{self, initialize_default_config};
 use crate::git::{constants, model};
 
 pub fn do_init(_arg: InitArgs) -> crate::Result<()> {
@@ -29,6 +31,7 @@ pub fn do_init(_arg: InitArgs) -> crate::Result<()> {
 
     initialize_default_config(&gitqlite_home)?;
     initialize_gitqlite_tables(&conn)?;
+    initialize_head(&gitqlite_home)?;
 
     if reinitialize {
         println!(
@@ -56,5 +59,21 @@ fn initialize_gitqlite_tables(conn: &Connection) -> crate::Result<()> {
         .context("Create Tree table")?;
     conn.execute(model::CREATE_BLOB_TABLE, ())
         .context("Create Blob table")?;
+    Ok(())
+}
+
+fn initialize_head(gitqlite_home: impl AsRef<Path>) -> crate::Result<()> {
+    let (default_branch, _) = config::get_config_all(gitqlite_home.as_ref(), "init.defaultBranch")?
+        .expect("Fail to retrieve default branch, please check your system gitconfig");
+    let full_branch_name = format!("{}{}", constants::BRANCH_PREFIX, default_branch);
+
+    let head_file = gitqlite_home.as_ref().join(constants::HEAD_FILE_PREFIX);
+    let mut f = fs::OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .create(true)
+        .open(head_file)?;
+    f.write_all(full_branch_name.as_bytes())?;
+
     Ok(())
 }

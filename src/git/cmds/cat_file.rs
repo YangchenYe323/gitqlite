@@ -3,7 +3,7 @@ use rusqlite::Connection;
 use crate::{
     cli::CatFileArgs,
     git::{
-        model::{Blob, Sha1Id, Tree, Commit},
+        model::{Blob, Commit, Sha1Id, Tree},
         utils::get_gitqlite_connection,
     },
 };

@@ -12,7 +12,7 @@ use std::fmt;
 use rusqlite::{
     params,
     types::{FromSql, FromSqlResult, ToSqlOutput, ValueRef},
-    Connection, ToSql,
+    Connection, OptionalExtension, ToSql,
 };
 
 /// HEAD points to a ref
@@ -36,6 +36,7 @@ pub const CREATE_BLOB_TABLE: &str = "CREATE TABLE Blobs (blob_id TEXT, data BLOB
 pub const READ_BLOB_FOR_ID: &str = "SELECT blob_id, data FROM Blobs WHERE blob_id = ?1";
 pub const READ_TREE_FOR_ID: &str = "SELECT tree_id, data FROM Trees WHERE tree_id = ?1";
 pub const READ_COMMIT_FOR_ID: &str = "SELECT commit_id, tree_id, parent_ids, author_name, author_email, committer_name, committer_email, message FROM Commits WHERE commit_id = ?1";
+pub const READ_REF_FOR_NAME: &str = "SELECT ref_name, commit_id FROM Refs WHERE ref_name = ?1";
 
 // Write queries
 pub const INSERT_BLOB: &str = "INSERT INTO Blobs (blob_id, data) VALUES (?1, ?2);";
@@ -192,6 +193,17 @@ impl TryFrom<&str> for Sha1Id {
     }
 }
 
+impl TryFrom<Vec<u8>> for Sha1Id {
+    type Error = anyhow::Error;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        let Ok(bytes) = value.try_into() else {
+            return Err(anyhow!("Byte is not valid Sha1"));
+        };
+        Ok(Sha1Id(bytes))
+    }
+}
+
 impl IdType<Sha1Id> for Sha1Id {
     type Id = Sha1Id;
 
@@ -220,6 +232,28 @@ pub struct Head(String);
 pub struct Ref {
     pub name: String,
     pub commit_id: Sha1Id,
+}
+
+impl Ref {
+    /// Read a reference from the database with the given name.
+    /// Note that this is expected to return None in some cases, e.g., when the repository
+    /// is just created with no commit yet, the HEAD will point to refs/head/main but the reference
+    /// would not exist yet
+    pub fn read_from_conn_with_name(
+        conn: &Connection,
+        name: impl AsRef<str>,
+    ) -> crate::Result<Option<Ref>> {
+        conn.query_row_and_then(READ_REF_FOR_NAME, [name.as_ref()], |row| {
+            let ref_name = row.get(0)?;
+            let commit_id = row.get(1)?;
+            Ok(Ref {
+                name: ref_name,
+                commit_id,
+            })
+        })
+        .optional()
+        .map_err(anyhow::Error::from)
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -382,6 +416,14 @@ mod tests {
     use rusqlite::params;
 
     use super::*;
+
+    #[test]
+    fn test_read_ref_none() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute(CREATE_REF_TABLE, ()).unwrap();
+        let r = Ref::read_from_conn_with_name(&conn, "ABNA").unwrap();
+        assert_eq!(None, r)
+    }
 
     #[test]
     fn test_read_blob() {
