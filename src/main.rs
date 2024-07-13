@@ -1,5 +1,10 @@
 use clap::Parser;
-use git::{do_cat_file, do_check_ignore, do_config, do_hash_object, do_init, do_ls_files};
+use git::cmds::cat_file::do_cat_file;
+use git::cmds::check_ignore::do_check_ignore;
+use git::cmds::config::do_config;
+use git::cmds::hash_object::do_hash_object;
+use git::cmds::init::do_init;
+use git::cmds::ls_files::do_ls_files;
 
 mod cli;
 mod git;
