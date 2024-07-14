@@ -91,7 +91,7 @@ impl GitqliteFileMetadataExt for fs::Metadata {
     }
 }
 
-#[cfg(target_os = "unix")]
+#[cfg(target_os = "linux")]
 impl GitqliteFileMetadataExt for fs::Metadata {
     fn g_ctime(&self) -> i64 {
         self.st_ctime_nsec()
