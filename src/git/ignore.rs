@@ -7,8 +7,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use super::utils::find_gitqlite_root;
-
 /// [`GitIgnore`] describes the whole git ignore structure of the current repository.
 #[derive(Debug)]
 pub struct GitIgnore {
@@ -61,9 +59,7 @@ pub fn gitignore_parse(r: &mut impl Read) -> crate::Result<Vec<IgnoreRule>> {
 }
 
 /// Read and build the whole gitignore structure of the current repository
-pub fn gitignore_read() -> crate::Result<GitIgnore> {
-    let repo_root = find_gitqlite_root(std::env::current_dir()?)?;
-
+pub fn read_gitignore(repo_root: PathBuf) -> crate::Result<GitIgnore> {
     let mut scoped = HashMap::new();
 
     // TODO: Implement absolute rules by looking at system configuration directories
@@ -94,23 +90,24 @@ pub fn gitignore_read() -> crate::Result<GitIgnore> {
     Ok(GitIgnore { scoped, absolute })
 }
 
-/// Return if the given target should be excluded given the gitignore configuration
-pub fn check_gitignore(gitignore: &GitIgnore, target: impl AsRef<Path>) -> bool {
-    let target = target.as_ref();
+impl GitIgnore {
+    pub fn should_ignore(&self, target: impl AsRef<Path>) -> bool {
+        let target = target.as_ref();
 
-    let canonicalized_target = if target.is_relative() {
-        // use dunce create to avoid \\? prefix on windows
-        dunce::canonicalize(target).expect("Failed to canonicalize target")
-    } else {
-        target.to_path_buf()
-    };
+        let canonicalized_target = if target.is_relative() {
+            // use dunce create to avoid \\? prefix on windows
+            dunce::canonicalize(target).expect("Failed to canonicalize target")
+        } else {
+            target.to_path_buf()
+        };
 
-    if let Some(result) = check_ignore_scoped(&gitignore.scoped, canonicalized_target) {
-        return result;
+        if let Some(result) = check_ignore_scoped(&self.scoped, canonicalized_target) {
+            return result;
+        }
+
+        // TODO: implement absolute check
+        false
     }
-
-    // TODO: implement absolute check
-    false
 }
 
 /// Check if the target should be excluded according to the specific .gitignore file located in directory `path`
@@ -250,7 +247,7 @@ mod tests {
 
         let gitignore = GitIgnore::new_for_testing(scoped, absolute);
 
-        assert!(check_gitignore(&gitignore, file_to_exclude))
+        assert!(gitignore.should_ignore(file_to_exclude))
     }
 
     #[test]
@@ -280,8 +277,8 @@ mod tests {
 
         let gitignore = GitIgnore::new_for_testing(scoped, absolute);
 
-        assert!(check_gitignore(&gitignore, file_to_exclude));
-        assert!(!check_gitignore(&gitignore, file_to_include));
+        assert!(gitignore.should_ignore(file_to_exclude));
+        assert!(!gitignore.should_ignore(file_to_include));
     }
 
     #[test]
@@ -309,7 +306,7 @@ mod tests {
 
         let gitignore = GitIgnore::new_for_testing(scoped, absolute);
 
-        assert!(check_gitignore(&gitignore, file_to_exclude));
+        assert!(gitignore.should_ignore(file_to_exclude));
     }
 
     #[test]
@@ -347,6 +344,6 @@ mod tests {
 
         let gitignore = GitIgnore::new_for_testing(scoped, absolute);
 
-        assert!(!check_gitignore(&gitignore, file_to_include));
+        assert!(!gitignore.should_ignore(file_to_include));
     }
 }

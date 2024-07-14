@@ -7,6 +7,7 @@ use rusqlite::Connection;
 
 use crate::cli::InitArgs;
 use crate::git::config::{self, initialize_default_config};
+use crate::git::index::{write_gitqlite_index, Index};
 use crate::git::{constants, model};
 
 pub fn do_init(_arg: InitArgs) -> crate::Result<()> {
@@ -32,6 +33,7 @@ pub fn do_init(_arg: InitArgs) -> crate::Result<()> {
     initialize_default_config(&gitqlite_home)?;
     initialize_gitqlite_tables(&conn)?;
     initialize_head(&gitqlite_home)?;
+    write_gitqlite_index(&gitqlite_home, &Index::default())?;
 
     if reinitialize {
         println!(

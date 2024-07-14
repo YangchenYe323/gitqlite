@@ -2,9 +2,11 @@
 //! Gitqlite uses JSON as the index format as compared to a custom binary format used by git,
 //! but the content is roughly on par
 
+use std::{fs, path::Path};
+
 use serde::{Deserialize, Serialize};
 
-use super::model::Sha1Id;
+use super::{constants, model::Sha1Id};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ModeType {
@@ -16,7 +18,6 @@ pub enum ModeType {
 /// [`Index`] represents the whole staging area
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Index {
-    pub version: u64,
     pub entries: Vec<IndexEntry>,
 }
 
@@ -41,7 +42,7 @@ pub struct IndexEntry {
     /// Owner GID
     pub gid: u32,
     /// Size of the file in bytes
-    pub fsize: usize,
+    pub fsize: u64,
     /// SHA of the object
     pub sha: Sha1Id,
     /// TODO: fill doc
@@ -50,4 +51,21 @@ pub struct IndexEntry {
     pub flag_stage: u8,
     /// Full path of the object
     pub name: String,
+}
+
+pub fn write_gitqlite_index(gitqlite_home: impl AsRef<Path>, index: &Index) -> crate::Result<()> {
+    let index_path = gitqlite_home.as_ref().join(constants::GITQLITE_INDEX_FILE);
+    let f = fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(&index_path)?;
+    serde_json::to_writer_pretty(f, index)?;
+    Ok(())
+}
+
+pub fn read_gitqlite_index(gitqlite_home: impl AsRef<Path>) -> crate::Result<Index> {
+    let index_path = gitqlite_home.as_ref().join(constants::GITQLITE_INDEX_FILE);
+    let f = fs::File::open(index_path)?;
+    serde_json::from_reader(f).map_err(anyhow::Error::from)
 }
