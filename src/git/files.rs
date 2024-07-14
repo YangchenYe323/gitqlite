@@ -2,6 +2,8 @@
 
 use std::fs;
 
+#[cfg(target_os = "linux")]
+use std::os::linux::fs::MetadataExt;
 #[cfg(target_os = "unix")]
 use std::os::unix::fs::MetadataExt;
 #[cfg(target_os = "windows")]
@@ -86,5 +88,40 @@ impl GitqliteFileMetadataExt for fs::Metadata {
 
     fn g_fsize(&self) -> u64 {
         self.size()
+    }
+}
+
+#[cfg(target_os = "unix")]
+impl GitqliteFileMetadataExt for fs::Metadata {
+    fn g_ctime(&self) -> i64 {
+        self.st_ctime_nsec()
+    }
+
+    fn g_mtime(&self) -> i64 {
+        self.st_mtime_nsec()
+    }
+
+    fn g_dev(&self) -> u64 {
+        self.st_dev()
+    }
+
+    fn g_ino(&self) -> u64 {
+        self.st_ino()
+    }
+
+    fn g_mode_perms(&self) -> u32 {
+        self.st_mode()
+    }
+
+    fn g_uid(&self) -> u32 {
+        self.st_uid()
+    }
+
+    fn g_gid(&self) -> u32 {
+        self.st_gid()
+    }
+
+    fn g_fsize(&self) -> u64 {
+        self.st_size()
     }
 }
