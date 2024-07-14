@@ -4,7 +4,7 @@ use std::fs;
 
 #[cfg(target_os = "linux")]
 use std::os::linux::fs::MetadataExt;
-#[cfg(target_os = "unix")]
+#[cfg(target_os = "macos")]
 use std::os::unix::fs::MetadataExt;
 #[cfg(target_os = "windows")]
 use std::os::windows::fs::MetadataExt;
@@ -56,7 +56,7 @@ impl GitqliteFileMetadataExt for fs::Metadata {
     }
 }
 
-#[cfg(target_os = "unix")]
+#[cfg(target_os = "macos")]
 impl GitqliteFileMetadataExt for fs::Metadata {
     fn g_ctime(&self) -> i64 {
         self.ctime_nsec()
