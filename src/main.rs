@@ -5,6 +5,7 @@ use git::cmds::config::do_config;
 use git::cmds::hash_object::do_hash_object;
 use git::cmds::init::do_init;
 use git::cmds::ls_files::do_ls_files;
+use git::cmds::rm::do_rm;
 use git::cmds::status::do_status;
 
 mod cli;
@@ -23,6 +24,7 @@ fn main() -> Result<()> {
         cli::GitCommand::CheckIgnore(arg) => do_check_ignore(arg),
         cli::GitCommand::Config(arg) => do_config(arg),
         cli::GitCommand::Status(arg) => do_status(arg),
+        cli::GitCommand::Rm(arg) => do_rm(arg),
         // _ => unimplemented!(),
     }
 }

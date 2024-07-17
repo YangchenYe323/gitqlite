@@ -21,6 +21,32 @@ pub struct Index {
     pub entries: Vec<IndexEntry>,
 }
 
+impl Index {
+    pub fn remove(
+        &mut self,
+        path: impl AsRef<Path>,
+        repo_root: impl AsRef<Path>,
+        remove_worktree: bool,
+    ) -> crate::Result<Option<IndexEntry>> {
+        let path = dunce::canonicalize(path)?;
+        let rel_path = path.strip_prefix(repo_root)?.to_string_lossy();
+
+        let Some(idx) = self
+            .entries
+            .iter()
+            .position(|entry| &entry.name == &*rel_path)
+        else {
+            return Ok(None);
+        };
+
+        if remove_worktree {
+            std::fs::remove_file(&path)?;
+        }
+
+        Ok(Some(self.entries.remove(idx)))
+    }
+}
+
 /// [`IndexEntry`] represents one entry in the staging area, which is the snapshot of a file
 /// in a point in time
 #[derive(Debug, Serialize, Deserialize)]
@@ -49,7 +75,7 @@ pub struct IndexEntry {
     pub flag_assume_valid: bool,
     /// TODO: fill doc
     pub flag_stage: u8,
-    /// Full path of the object
+    /// Full path of the object relative to repo root
     pub name: String,
 }
 

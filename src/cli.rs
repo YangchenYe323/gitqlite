@@ -13,24 +13,20 @@ pub struct GitCli {
 pub enum GitCommand {
     /// Create an empty Git repository or reinitialize an existing one
     Init(InitArgs),
-
     /// Provide contents or details of repository objects
     CatFile(CatFileArgs),
-
     /// Compute object ID and optionally create an object from a file
     HashObject(HashObjectArgs),
-
     /// Show content of the staging area
     LsFiles(LsFilesArgs),
-
     /// Check whether the file is excluded by .gitignore (or other input files to the exclude mechanism) and output the path if it is excluded.
     CheckIgnore(CheckIgnoreArgs),
-
     /// Show the working tree status
     Status(StatusArgs),
-
     /// Get and set repository or global options
     Config(ConfigArgs),
+    /// Remove files from the working tree and from the index
+    Rm(RmArgs),
 }
 
 #[derive(Args, Clone)]
@@ -108,4 +104,13 @@ pub struct ConfigArgs {
     /// use repository config file
     #[arg(long)]
     pub local: bool,
+}
+
+#[derive(Args, Clone)]
+pub struct RmArgs {
+    /// File to remove (recursively removing directory is not supported yet)
+    pub path: PathBuf,
+    /// Use this option to unstage and remove paths only from the index. Working tree files, whether modified or not, will be left alone.
+    #[arg(long)]
+    pub cached: bool,
 }
