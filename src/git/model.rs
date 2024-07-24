@@ -39,7 +39,7 @@ pub const READ_COMMIT_FOR_ID: &str = "SELECT commit_id, tree_id, parent_ids, aut
 pub const READ_REF_FOR_NAME: &str = "SELECT ref_name, commit_id FROM Refs WHERE ref_name = ?1";
 
 // Write queries
-pub const INSERT_BLOB: &str = "INSERT INTO Blobs (blob_id, data) VALUES (?1, ?2);";
+pub const INSERT_BLOB: &str = "INSERT OR IGNORE INTO Blobs (blob_id, data) VALUES (?1, ?2);";
 
 /// Generic trait describing any git object that could be hashed and get an ID for.
 pub trait Hashable {
@@ -548,5 +548,23 @@ mod tests {
         let blob1_id = blob1.hash(sha1::Sha1::new());
         let blob2_id = blob2.hash(sha1::Sha1::new());
         assert_eq!(blob1_id, blob2_id)
+    }
+
+    #[test]
+    fn test_insert_same_blob() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute(CREATE_BLOB_TABLE, ()).unwrap();
+
+        let data = b"AAASdlkaSJdkljwehsajlkfdewqjklfdewqjlkwl";
+        let blob1 = Blob::new(data.to_vec());
+        let id = blob1.hash(sha1::Sha1::new());
+        let blob1 = blob1.with_id(id);
+
+        let blob2 = Blob::new(data.to_vec());
+        let id = blob2.hash(sha1::Sha1::new());
+        let blob2 = blob2.with_id(id);
+
+        assert!(blob1.persist(&conn).is_ok());
+        assert!(blob2.persist(&conn).is_ok());
     }
 }

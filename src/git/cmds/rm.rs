@@ -1,6 +1,10 @@
 use crate::{
     cli::RmArgs,
-    git::{constants, index::read_gitqlite_index, utils::find_gitqlite_root},
+    git::{
+        constants,
+        index::{read_gitqlite_index, write_gitqlite_index},
+        utils::find_gitqlite_root,
+    },
 };
 
 pub fn do_rm(arg: RmArgs) -> crate::Result<()> {
@@ -13,6 +17,9 @@ pub fn do_rm(arg: RmArgs) -> crate::Result<()> {
     if let Some(entry) = index.remove(&path, &repo_root, !cached)? {
         println!("rm {}", entry.name);
     }
+
+    // Persist index to file
+    write_gitqlite_index(&gitqlite_home, &index)?;
 
     Ok(())
 }

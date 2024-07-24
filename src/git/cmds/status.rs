@@ -47,6 +47,8 @@ pub fn do_status(_arg: StatusArgs) -> crate::Result<()> {
         }
         None => {
             println!("No commits yet");
+            let dummy_tree_view = BTreeMap::new();
+            print_diff_index_head(&index, &dummy_tree_view);
         }
     }
 

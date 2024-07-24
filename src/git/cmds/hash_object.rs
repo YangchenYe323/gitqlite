@@ -6,6 +6,7 @@ use std::{fs, io::Read, path::Path};
 use crate::{
     cli::{HashObjectArgs, ObjectType},
     git::{
+        files::GitqliteFileMetadataExt,
         model::{Blob, Hashable, Sha1Id},
         utils::get_gitqlite_connection,
     },
@@ -29,7 +30,7 @@ pub fn do_hash_object(arg: HashObjectArgs) -> crate::Result<()> {
     Ok(())
 }
 
-fn construct_blob_from_file(path: impl AsRef<Path>) -> crate::Result<Blob<Sha1Id>> {
+pub fn construct_blob_from_file(path: impl AsRef<Path>) -> crate::Result<Blob<Sha1Id>> {
     let path = path.as_ref();
 
     if !path.is_file() {
@@ -41,7 +42,7 @@ fn construct_blob_from_file(path: impl AsRef<Path>) -> crate::Result<Blob<Sha1Id
 
     let data = {
         let mut f = fs::File::open(path)?;
-        let mut buffer = Vec::with_capacity(1024);
+        let mut buffer = Vec::with_capacity(f.metadata()?.g_fsize() as usize);
         f.read_to_end(&mut buffer)?;
         buffer
     };

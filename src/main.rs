@@ -1,4 +1,5 @@
 use clap::Parser;
+use git::cmds::add::do_add;
 use git::cmds::cat_file::do_cat_file;
 use git::cmds::check_ignore::do_check_ignore;
 use git::cmds::config::do_config;
@@ -25,6 +26,7 @@ fn main() -> Result<()> {
         cli::GitCommand::Config(arg) => do_config(arg),
         cli::GitCommand::Status(arg) => do_status(arg),
         cli::GitCommand::Rm(arg) => do_rm(arg),
+        cli::GitCommand::Add(arg) => do_add(arg),
         // _ => unimplemented!(),
     }
 }

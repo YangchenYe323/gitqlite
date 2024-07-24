@@ -27,6 +27,8 @@ pub enum GitCommand {
     Config(ConfigArgs),
     /// Remove files from the working tree and from the index
     Rm(RmArgs),
+    /// Add file contents to the index
+    Add(AddArgs),
 }
 
 #[derive(Args, Clone)]
@@ -113,4 +115,10 @@ pub struct RmArgs {
     /// Use this option to unstage and remove paths only from the index. Working tree files, whether modified or not, will be left alone.
     #[arg(long)]
     pub cached: bool,
+}
+
+#[derive(Args, Clone)]
+pub struct AddArgs {
+    /// File to add (recursively adding directory is not supported yet)
+    pub path: PathBuf,
 }
