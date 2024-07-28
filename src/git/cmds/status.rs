@@ -236,7 +236,11 @@ fn tree_view(tree_id: Sha1Id, conn: &Connection) -> crate::Result<BTreeMap<Strin
         for entry in cur_tree.entries {
             match entry.type_ {
                 TreeEntryType::Blob => {
-                    let blob_full_name = prefix.clone() + &format!("/{}", entry.name);
+                    let blob_full_name = if prefix.is_empty() {
+                        entry.name
+                    } else {
+                        prefix.clone() + &format!("/{}", entry.name)
+                    };
                     view.insert(blob_full_name, entry.id);
                 }
                 TreeEntryType::Tree => {

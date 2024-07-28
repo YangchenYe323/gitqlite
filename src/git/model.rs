@@ -44,6 +44,8 @@ pub const READ_REF_FOR_NAME: &str = "SELECT ref_name, commit_id FROM Refs WHERE 
 pub const INSERT_BLOB: &str = "INSERT OR IGNORE INTO Blobs (blob_id, data) VALUES (?1, ?2);";
 pub const INSERT_TREE: &str = "INSERT OR IGNORE INTO Trees (tree_id, data) VALUES (?1, ?2);";
 pub const INSERT_COMMIT: &str = "INSERT OR IGNORE INTO Commits (commit_id, tree_id, parent_ids, author_name, author_email, committer_name, committer_email, message) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8);";
+pub const INSERT_OR_REPLACE_REF: &str =
+    "INSERT OR REPLACE INTO Refs (ref_name, commit_id) VALUES (?1, ?2);";
 
 /// Generic trait describing any git object that could be hashed and get an ID for.
 pub trait Hashable {
@@ -262,6 +264,11 @@ impl Ref {
         })
         .optional()
         .map_err(anyhow::Error::from)
+    }
+
+    pub fn persist_or_update(&self, conn: &Connection) -> crate::Result<()> {
+        conn.execute(INSERT_OR_REPLACE_REF, params![self.name, self.commit_id])?;
+        Ok(())
     }
 }
 

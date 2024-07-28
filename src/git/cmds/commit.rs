@@ -102,10 +102,10 @@ pub fn do_commit(arg: CommitArgs) -> crate::Result<()> {
 
     // Create commit
     // Get the current root commit
-    let head = Head::get_current(gitqlite_home)?;
-    let root_commit = match head {
-        Head::Branch(branch) => Ref::read_from_conn_with_name(&conn, &branch)?.map(|r| r.commit_id),
-        Head::Commit(id) => Some(id),
+    let head = Head::get_current(&gitqlite_home)?;
+    let root_commit = match &head {
+        Head::Branch(branch) => Ref::read_from_conn_with_name(&conn, branch)?.map(|r| r.commit_id),
+        Head::Commit(id) => Some(*id),
     };
 
     let parent_ids = if let Some(root_commit) = root_commit {
@@ -126,6 +126,18 @@ pub fn do_commit(arg: CommitArgs) -> crate::Result<()> {
     let commit_id = commit.hash(sha1::Sha1::new());
     let commit = commit.with_id(commit_id);
     commit.persist(&conn)?;
+
+    // Update ref to the root commit
+    match head {
+        Head::Branch(name) => {
+            let new_ref = Ref { name, commit_id };
+            new_ref.persist_or_update(&conn)?;
+        }
+        Head::Commit(_) => {
+            let new_head = Head::Commit(commit_id);
+            new_head.persist(&gitqlite_home)?;
+        }
+    }
 
     println!("Created new commit {}", commit.commit_id);
 
