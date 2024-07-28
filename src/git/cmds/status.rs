@@ -165,33 +165,34 @@ fn print_diff_index_worktree(
                 .to_string_lossy()
                 .to_string();
 
+            if path.is_dir() {
+                queue.push_back(path);
+                continue;
+            }
+
             if !index.contains_key(&rel_path) {
                 added.push(rel_path);
                 continue;
             }
 
-            if path.is_dir() {
-                queue.push_back(path);
+            let entry = index.get(&rel_path).unwrap();
+            let mut f = fs::File::open(&path)?;
+            let metadata = f.metadata()?;
+
+            // Compare metadata first
+            let actual_mtime = metadata.g_mtime();
+            let is_modified = if actual_mtime != entry.mtime {
+                let mut buffer = Vec::with_capacity(metadata.g_fsize() as usize);
+                f.read_to_end(&mut buffer)?;
+                let actual_hash = Blob::new(buffer).hash(sha1::Sha1::new());
+                actual_hash != entry.sha
             } else {
-                let entry = index.get(&rel_path).unwrap();
-                let mut f = fs::File::open(&path)?;
-                let metadata = f.metadata()?;
+                false
+            };
 
-                // Compare metadata first
-                let actual_mtime = metadata.g_mtime();
-                let is_modified = if actual_mtime != entry.mtime {
-                    let mut buffer = Vec::with_capacity(metadata.g_fsize() as usize);
-                    f.read_to_end(&mut buffer)?;
-                    let actual_hash = Blob::new(buffer).hash(sha1::Sha1::new());
-                    actual_hash == entry.sha
-                } else {
-                    false
-                };
-
-                index.remove(&rel_path);
-                if is_modified {
-                    modified.push(rel_path);
-                }
+            index.remove(&rel_path);
+            if is_modified {
+                modified.push(rel_path);
             }
         }
     }
