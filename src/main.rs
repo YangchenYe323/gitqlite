@@ -2,6 +2,7 @@ use clap::Parser;
 use git::cmds::add::do_add;
 use git::cmds::cat_file::do_cat_file;
 use git::cmds::check_ignore::do_check_ignore;
+use git::cmds::commit::do_commit;
 use git::cmds::config::do_config;
 use git::cmds::hash_object::do_hash_object;
 use git::cmds::init::do_init;
@@ -27,6 +28,6 @@ fn main() -> Result<()> {
         cli::GitCommand::Status(arg) => do_status(arg),
         cli::GitCommand::Rm(arg) => do_rm(arg),
         cli::GitCommand::Add(arg) => do_add(arg),
-        // _ => unimplemented!(),
+        cli::GitCommand::Commit(arg) => do_commit(arg),
     }
 }

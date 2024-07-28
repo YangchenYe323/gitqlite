@@ -1,20 +1,13 @@
-use std::{fs, io::Read};
+use std::fs;
 
 use anyhow::anyhow;
-use sha1::Digest;
 
 use crate::git::constants::GITQLITE_DIRECTORY_PREFIX;
 use crate::git::files::GitqliteFileMetadataExt;
 use crate::git::ignore::read_gitignore;
 use crate::git::index::{read_gitqlite_index, write_gitqlite_index, IndexEntry, ModeType};
 use crate::git::utils::get_gitqlite_connection;
-use crate::{
-    cli::AddArgs,
-    git::{
-        model::{Blob, Hashable},
-        utils::find_gitqlite_root,
-    },
-};
+use crate::{cli::AddArgs, git::utils::find_gitqlite_root};
 
 use super::hash_object::construct_blob_from_file;
 

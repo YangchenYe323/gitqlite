@@ -29,6 +29,8 @@ pub enum GitCommand {
     Rm(RmArgs),
     /// Add file contents to the index
     Add(AddArgs),
+    /// Record changes to the repository
+    Commit(CommitArgs),
 }
 
 #[derive(Args, Clone)]
@@ -121,4 +123,12 @@ pub struct RmArgs {
 pub struct AddArgs {
     /// File to add (recursively adding directory is not supported yet)
     pub path: PathBuf,
+}
+
+/// Record changes to the repository
+#[derive(Args, Clone)]
+pub struct CommitArgs {
+    /// Use the given message as the commit message.
+    #[arg(long, short)]
+    pub message: String,
 }

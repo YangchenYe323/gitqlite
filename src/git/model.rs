@@ -7,13 +7,15 @@
 use anyhow::{anyhow, Context};
 use serde::{Deserialize, Serialize};
 use sha1::{self, Digest};
-use std::fmt;
+use std::{fmt, fs, path::Path};
 
 use rusqlite::{
     params,
     types::{FromSql, FromSqlResult, ToSqlOutput, ValueRef},
     Connection, OptionalExtension, ToSql,
 };
+
+use super::constants;
 
 /// HEAD points to a ref
 pub const CREATE_HEAD_TABLE: &str = "CREATE TABLE Head (ref_name TEXT NOT NULL);";
@@ -40,6 +42,8 @@ pub const READ_REF_FOR_NAME: &str = "SELECT ref_name, commit_id FROM Refs WHERE 
 
 // Write queries
 pub const INSERT_BLOB: &str = "INSERT OR IGNORE INTO Blobs (blob_id, data) VALUES (?1, ?2);";
+pub const INSERT_TREE: &str = "INSERT OR IGNORE INTO Trees (tree_id, data) VALUES (?1, ?2);";
+pub const INSERT_COMMIT: &str = "INSERT OR IGNORE INTO Commits (commit_id, tree_id, parent_ids, author_name, author_email, committer_name, committer_email, message) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8);";
 
 /// Generic trait describing any git object that could be hashed and get an ID for.
 pub trait Hashable {
@@ -60,26 +64,8 @@ impl<T> Hashable for Tree<T> {
         // The hash of the tree is the hash of all the tree entries in the format
         // <mode> <type> <id> <name>
         // concatenated with "\n"
-        for (i, entry) in self.entries.iter().enumerate() {
-            if i > 0 {
-                sha.update(b"\n");
-            }
-
-            // hash mode
-            sha.update(entry.mode.as_bytes());
-            sha.update(b" ");
-
-            // hash type
-            sha.update(entry.type_.as_str());
-            sha.update(b" ");
-
-            // hash object id
-            sha.update(entry.id.0);
-            sha.update(b" ");
-
-            // hash file name
-            sha.update(&entry.name);
-        }
+        let text = self.encode_entries();
+        sha.update(&text);
 
         let result = sha.finalize();
         Sha1Id(result.into())
@@ -225,8 +211,31 @@ impl ToSql for Sha1Id {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub struct Head(String);
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Head {
+    Branch(String),
+    Commit(Sha1Id),
+}
+
+impl Head {
+    pub fn get_current(gitqlite_home: impl AsRef<Path>) -> crate::Result<Head> {
+        let head_path = gitqlite_home.as_ref().join(constants::HEAD_FILE_PREFIX);
+        let f = fs::File::open(&head_path)?;
+        let head = serde_json::from_reader(f)?;
+        Ok(head)
+    }
+
+    pub fn persist(&self, gitqlite_home: impl AsRef<Path>) -> crate::Result<()> {
+        let head_path = gitqlite_home.as_ref().join(constants::HEAD_FILE_PREFIX);
+        let f = fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&head_path)?;
+        serde_json::to_writer(f, self)?;
+        Ok(())
+    }
+}
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Ref {
@@ -268,6 +277,42 @@ pub struct Commit<ID> {
     pub message: String,
 }
 
+impl Commit<NoId> {
+    pub fn new(
+        tree_id: Sha1Id,
+        parent_ids: Vec<Sha1Id>,
+        author_name: String,
+        author_email: String,
+        committer_name: String,
+        committer_email: String,
+        message: String,
+    ) -> Commit<NoId> {
+        Commit {
+            commit_id: NoId,
+            tree_id,
+            parent_ids,
+            author_name,
+            author_email,
+            committer_name,
+            committer_email,
+            message,
+        }
+    }
+
+    pub fn with_id(self, id: Sha1Id) -> Commit<Sha1Id> {
+        Commit {
+            commit_id: id,
+            tree_id: self.tree_id,
+            parent_ids: self.parent_ids,
+            author_name: self.author_name,
+            author_email: self.author_email,
+            committer_name: self.committer_name,
+            committer_email: self.committer_email,
+            message: self.message,
+        }
+    }
+}
+
 impl Commit<Sha1Id> {
     pub fn read_from_conn_with_id(conn: &Connection, id: Sha1Id) -> crate::Result<Commit<Sha1Id>> {
         conn.query_row_and_then(READ_COMMIT_FOR_ID, [id], |row| {
@@ -301,12 +346,75 @@ impl Commit<Sha1Id> {
             })
         })
     }
+
+    pub fn persist(&self, conn: &Connection) -> crate::Result<()> {
+        let mut parent_ids: Vec<u8> = Vec::with_capacity(self.parent_ids.len() * 20);
+        for parent_id in &self.parent_ids {
+            parent_ids.extend(parent_id.0.iter());
+        }
+
+        conn.execute(
+            INSERT_COMMIT,
+            params![
+                self.commit_id,
+                self.tree_id,
+                parent_ids,
+                self.author_name,
+                self.author_email,
+                self.committer_name,
+                self.committer_email,
+                self.message
+            ],
+        )?;
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Tree<ID> {
     pub tree_id: ID,
     pub entries: Vec<TreeEntry>,
+}
+
+impl<ID> Tree<ID> {
+    fn encode_entries(&self) -> String {
+        use std::fmt::Write;
+        let mut buffer = String::new();
+        for (i, entry) in self.entries.iter().enumerate() {
+            if i > 0 {
+                writeln!(&mut buffer).unwrap();
+            }
+            let type_ = match entry.type_ {
+                TreeEntryType::Blob => "blob",
+                TreeEntryType::Tree => "tree",
+            };
+            write!(
+                &mut buffer,
+                "{} {} {} {}",
+                entry.mode, type_, entry.id, entry.name
+            )
+            .unwrap();
+        }
+
+        buffer
+    }
+}
+
+impl Tree<NoId> {
+    pub fn new(entries: Vec<TreeEntry>) -> Tree<NoId> {
+        Tree {
+            tree_id: NoId,
+            entries,
+        }
+    }
+
+    pub fn with_id(self, id: Sha1Id) -> Tree<Sha1Id> {
+        Tree {
+            tree_id: id,
+            entries: self.entries,
+        }
+    }
 }
 
 impl Tree<Sha1Id> {
@@ -341,6 +449,12 @@ impl Tree<Sha1Id> {
             Ok(Tree { tree_id, entries })
         })
     }
+
+    pub fn persist(&self, conn: &Connection) -> crate::Result<()> {
+        let data = self.encode_entries();
+        conn.execute(INSERT_TREE, params![self.tree_id, data])?;
+        Ok(())
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -369,7 +483,7 @@ pub struct TreeEntry {
     pub type_: TreeEntryType,
     pub id: Sha1Id,
     // ? We don't currently use mode yet, and haven't settled on how mode is going to be represented
-    mode: String,
+    pub mode: String,
     pub name: String,
 }
 

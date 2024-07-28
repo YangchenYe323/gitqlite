@@ -16,7 +16,7 @@ use crate::{
         files::GitqliteFileMetadataExt,
         ignore::read_gitignore,
         index::{read_gitqlite_index, Index, IndexEntry},
-        model::{self, Blob, Commit, Hashable, Sha1Id, Tree, TreeEntryType},
+        model::{self, Blob, Commit, Hashable, Head, Sha1Id, Tree, TreeEntryType},
         utils::{find_gitqlite_root, get_gitqlite_connection},
     },
 };
@@ -31,7 +31,7 @@ pub fn do_status(_arg: StatusArgs) -> crate::Result<()> {
     let gitqlite_home = repo_root.join(constants::GITQLITE_DIRECTORY_PREFIX);
     let conn = get_gitqlite_connection()?;
 
-    let head = get_current_head(&gitqlite_home)?;
+    let head = Head::get_current(&gitqlite_home)?;
 
     // Print branch status
     print_status_branch(&head);
@@ -59,23 +59,6 @@ pub fn do_status(_arg: StatusArgs) -> crate::Result<()> {
     println!();
 
     Ok(())
-}
-
-enum Head {
-    Branch(String),
-    Commit(Sha1Id),
-}
-
-fn get_current_head(gitqlite_home: impl AsRef<Path>) -> crate::Result<Head> {
-    let head_path = gitqlite_home.as_ref().join(constants::HEAD_FILE_PREFIX);
-    let head_content = fs::read_to_string(head_path)?;
-    if head_content.starts_with(constants::BRANCH_PREFIX) {
-        return Ok(Head::Branch(head_content));
-    }
-
-    // Head is the hex format of an sha1 hash
-    let id = Sha1Id::try_from(&*head_content).expect("Malformed HEAD file");
-    Ok(Head::Commit(id))
 }
 
 fn print_status_branch(head: &Head) {

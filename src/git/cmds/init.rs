@@ -1,5 +1,4 @@
 use std::fs;
-use std::io::Write;
 use std::path::Path;
 
 use anyhow::Context;
@@ -8,6 +7,7 @@ use rusqlite::Connection;
 use crate::cli::InitArgs;
 use crate::git::config::{self, initialize_default_config};
 use crate::git::index::{write_gitqlite_index, Index};
+use crate::git::model::Head;
 use crate::git::{constants, model};
 
 pub fn do_init(_arg: InitArgs) -> crate::Result<()> {
@@ -69,13 +69,6 @@ fn initialize_head(gitqlite_home: impl AsRef<Path>) -> crate::Result<()> {
         .expect("Fail to retrieve default branch, please check your system gitconfig");
     let full_branch_name = format!("{}{}", constants::BRANCH_PREFIX, default_branch);
 
-    let head_file = gitqlite_home.as_ref().join(constants::HEAD_FILE_PREFIX);
-    let mut f = fs::OpenOptions::new()
-        .write(true)
-        .truncate(true)
-        .create(true)
-        .open(head_file)?;
-    f.write_all(full_branch_name.as_bytes())?;
-
-    Ok(())
+    let head = Head::Branch(full_branch_name);
+    head.persist(gitqlite_home)
 }
