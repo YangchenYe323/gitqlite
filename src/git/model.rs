@@ -5,7 +5,7 @@
 //! 3. The hash of a commit (commit_id) is the SHA256 of the content built by joining all the fields with "\n".
 
 use anyhow::{anyhow, Context};
-use serde::{Deserialize, Serialize};
+use serde::{de::Visitor, Deserialize, Serialize};
 use sha1::{self, Digest};
 use std::{fmt, fs, path::Path};
 
@@ -144,7 +144,7 @@ impl<T> IdType<T> for NoId {
 }
 
 /// The canonical ID type used for all git objects, which is a SHA1 hash byte array
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Sha1Id([u8; 20]);
 
 impl fmt::Display for Sha1Id {
@@ -158,6 +158,45 @@ impl fmt::Display for Sha1Id {
                 .collect::<Vec<_>>()
                 .join("")
         )
+    }
+}
+
+impl Serialize for Sha1Id {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        // Serialize as the hex string representation
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for Sha1Id {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct Sha1IdVisitor;
+        impl<'v> Visitor<'v> for Sha1IdVisitor {
+            type Value = Sha1Id;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("A hex string of length 40")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                match Sha1Id::try_from(v) {
+                    Ok(sha1_id) => Ok(sha1_id),
+                    Err(e) => Err(E::custom(format!("{}", e))),
+                }
+            }
+        }
+
+        let s = deserializer.deserialize_str(Sha1IdVisitor)?;
+        Ok(s)
     }
 }
 
