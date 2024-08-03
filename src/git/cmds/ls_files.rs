@@ -1,25 +1,20 @@
-use std::fs;
 
 use chrono::DateTime;
 
 use crate::{
     cli::LsFilesArgs,
     git::{
-        constants,
-        index::{Index, ModeType},
-        utils::find_gitqlite_root,
+        model::{Index, ModeType},
+        utils::{get_gitqlite_connection},
     },
 };
 
 pub fn do_ls_files(arg: LsFilesArgs) -> crate::Result<()> {
-    let repo_root = find_gitqlite_root(std::env::current_dir()?)?;
-    let index_file = repo_root.join(constants::GITQLITE_INDEX_FILE);
+    let conn = get_gitqlite_connection()?;
 
-    let file: Index = fs::File::open(index_file)
-        .map(|f| serde_json::from_reader(f).expect("Malformed index.json file"))
-        .unwrap_or_default();
+    let index = Index::read_from_conn(&conn)?;
 
-    for entry in file.entries {
+    for entry in index.entries {
         println!("{}", entry.name);
         if arg.verbose {
             let file_type = match entry.mode_type {

@@ -5,6 +5,5 @@ mod config;
 mod constants;
 mod files;
 mod ignore;
-mod index;
 mod model;
 mod utils;

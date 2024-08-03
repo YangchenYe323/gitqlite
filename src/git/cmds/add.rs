@@ -5,7 +5,7 @@ use anyhow::anyhow;
 use crate::git::constants::GITQLITE_DIRECTORY_PREFIX;
 use crate::git::files::GitqliteFileMetadataExt;
 use crate::git::ignore::read_gitignore;
-use crate::git::index::{read_gitqlite_index, write_gitqlite_index, IndexEntry, ModeType};
+use crate::git::model::{Index, IndexEntry, ModeType};
 use crate::git::utils::get_gitqlite_connection;
 use crate::{cli::AddArgs, git::utils::find_gitqlite_root};
 
@@ -24,7 +24,7 @@ pub fn do_add(arg: AddArgs) -> crate::Result<()> {
     let conn = get_gitqlite_connection()?;
     let gitqlite_home = repo_root.join(GITQLITE_DIRECTORY_PREFIX);
     let ignore = read_gitignore(gitqlite_home.clone())?;
-    let mut index = read_gitqlite_index(&gitqlite_home)?;
+    let mut index = Index::read_from_conn(&conn)?;
 
     if !path.starts_with(&repo_root) {
         return Err(anyhow!(
@@ -74,7 +74,6 @@ pub fn do_add(arg: AddArgs) -> crate::Result<()> {
 
     index.entries.push(entry);
 
-    write_gitqlite_index(&gitqlite_home, &index)?;
-
+    index.persist(&conn)?;
     Ok(())
 }
