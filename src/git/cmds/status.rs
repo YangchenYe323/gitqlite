@@ -15,8 +15,9 @@ use crate::{
         constants,
         files::GitqliteFileMetadataExt,
         ignore::read_gitignore,
-        index::{read_gitqlite_index, Index, IndexEntry},
-        model::{self, Blob, Commit, Hashable, Head, Sha1Id, Tree, TreeEntryType},
+        model::{
+            self, Blob, Commit, Hashable, Head, Index, IndexEntry, Sha1Id, Tree, TreeEntryType,
+        },
         utils::{find_gitqlite_root, get_gitqlite_connection},
     },
 };
@@ -28,16 +29,15 @@ use crate::{
 /// the files to be addeds. It also collects information about untracked files.
 pub fn do_status(_arg: StatusArgs) -> crate::Result<()> {
     let repo_root = find_gitqlite_root(std::env::current_dir()?)?;
-    let gitqlite_home = repo_root.join(constants::GITQLITE_DIRECTORY_PREFIX);
     let conn = get_gitqlite_connection()?;
 
-    let head = Head::get_current(&gitqlite_home)?;
+    let head = Head::read_from_conn(&conn)?;
 
     // Print branch status
     print_status_branch(&head);
     println!();
 
-    let index = index_map(read_gitqlite_index(&gitqlite_home)?);
+    let index = index_map(Index::read_from_conn(&conn)?);
     let head_tree_view = get_head_tree_view(&conn, head)?;
 
     // Print index/head diff (things to commit)

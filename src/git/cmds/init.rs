@@ -6,7 +6,6 @@ use rusqlite::Connection;
 
 use crate::cli::InitArgs;
 use crate::git::config::{self, initialize_default_config};
-use crate::git::index::{write_gitqlite_index, Index};
 use crate::git::model::Head;
 use crate::git::{constants, model};
 
@@ -32,8 +31,7 @@ pub fn do_init(_arg: InitArgs) -> crate::Result<()> {
 
     initialize_default_config(&gitqlite_home)?;
     initialize_gitqlite_tables(&conn)?;
-    initialize_head(&gitqlite_home)?;
-    write_gitqlite_index(&gitqlite_home, &Index::default())?;
+    initialize_head(&gitqlite_home, &conn)?;
 
     if reinitialize {
         println!(
@@ -51,6 +49,8 @@ pub fn do_init(_arg: InitArgs) -> crate::Result<()> {
 }
 
 fn initialize_gitqlite_tables(conn: &Connection) -> crate::Result<()> {
+    conn.execute(model::CREATE_INDEX_TABLE, ())
+        .context("Create Index table")?;
     conn.execute(model::CREATE_HEAD_TABLE, ())
         .context("Create Head table")?;
     conn.execute(model::CREATE_REF_TABLE, ())
@@ -64,11 +64,11 @@ fn initialize_gitqlite_tables(conn: &Connection) -> crate::Result<()> {
     Ok(())
 }
 
-fn initialize_head(gitqlite_home: impl AsRef<Path>) -> crate::Result<()> {
+fn initialize_head(gitqlite_home: impl AsRef<Path>, conn: &Connection) -> crate::Result<()> {
     let (default_branch, _) = config::get_config_all(gitqlite_home.as_ref(), "init.defaultBranch")?
         .expect("Fail to retrieve default branch, please check your system gitconfig");
     let full_branch_name = format!("{}{}", constants::BRANCH_PREFIX, default_branch);
 
     let head = Head::Branch(full_branch_name);
-    head.persist(gitqlite_home)
+    head.persist(conn)
 }

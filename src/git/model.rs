@@ -7,7 +7,7 @@
 use anyhow::{anyhow, Context};
 use serde::{de::Visitor, Deserialize, Serialize};
 use sha1::{self, Digest};
-use std::{fmt, fs, path::Path};
+use std::{fmt, path::Path};
 
 use rusqlite::{
     params,
@@ -15,10 +15,10 @@ use rusqlite::{
     Connection, OptionalExtension, ToSql,
 };
 
-use super::constants;
-
-/// HEAD points to a ref
-pub const CREATE_HEAD_TABLE: &str = "CREATE TABLE Head (ref_name TEXT NOT NULL);";
+/// Index table stores a single copy of a [`Index`] data structure in JSONB format
+pub const CREATE_INDEX_TABLE: &str = "CREATE TABLE Index_ (index_ JSON);";
+/// Head tables stores a single copy of a [`Head`] data structure in JSON format
+pub const CREATE_HEAD_TABLE: &str = "CREATE TABLE Head (head JSON);";
 /// Ref points to a commit
 pub const CREATE_REF_TABLE: &str =
     "CREATE TABLE Refs (ref_name TEXT PRIMARY KEY, commit_id BLOB NOT NULL);";
@@ -35,12 +35,16 @@ pub const CREATE_TREE_TABLE: &str =
 pub const CREATE_BLOB_TABLE: &str = "CREATE TABLE Blobs (blob_id TEXT, data BLOB NOT NULL);";
 
 // Read queries
+pub const READ_INDEX: &str = "SELECT index_ FROM Index_";
+pub const READ_HEAD: &str = "SELECT head FROM Head";
 pub const READ_BLOB_FOR_ID: &str = "SELECT blob_id, data FROM Blobs WHERE blob_id = ?1";
 pub const READ_TREE_FOR_ID: &str = "SELECT tree_id, data FROM Trees WHERE tree_id = ?1";
 pub const READ_COMMIT_FOR_ID: &str = "SELECT commit_id, tree_id, parent_ids, author_name, author_email, committer_name, committer_email, message FROM Commits WHERE commit_id = ?1";
 pub const READ_REF_FOR_NAME: &str = "SELECT ref_name, commit_id FROM Refs WHERE ref_name = ?1";
 
 // Write queries
+pub const INSERT_INDEX: &str = "INSERT INTO Index_ VALUES (?1);";
+pub const INSERT_HEAD: &str = "INSERT INTO Head (head) VALUES (?1);";
 pub const INSERT_BLOB: &str = "INSERT OR IGNORE INTO Blobs (blob_id, data) VALUES (?1, ?2);";
 pub const INSERT_TREE: &str = "INSERT OR IGNORE INTO Trees (tree_id, data) VALUES (?1, ?2);";
 pub const INSERT_COMMIT: &str = "INSERT OR IGNORE INTO Commits (commit_id, tree_id, parent_ids, author_name, author_email, committer_name, committer_email, message) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8);";
@@ -252,6 +256,93 @@ impl ToSql for Sha1Id {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ModeType {
+    Regular,
+    Symlink,
+    Gitlink,
+}
+
+/// [`IndexEntry`] represents one entry in the staging area, which is the snapshot of a file
+/// in a point in time
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct IndexEntry {
+    /// The last time the file's metadata has changed, in nanosecond
+    pub ctime: i64,
+    /// The last time the file's data has changed, in nanosecond
+    pub mtime: i64,
+    /// The ID of device containing this file
+    pub dev: u64,
+    /// The inode number of the file
+    pub ino: u64,
+    /// Mode type
+    pub mode_type: ModeType,
+    /// Mode permissions
+    pub mode_perms: u32,
+    /// Owner UID
+    pub uid: u32,
+    /// Owner GID
+    pub gid: u32,
+    /// Size of the file in bytes
+    pub fsize: u64,
+    /// SHA of the object
+    pub sha: Sha1Id,
+    /// TODO: fill doc
+    pub flag_assume_valid: bool,
+    /// TODO: fill doc
+    pub flag_stage: u8,
+    /// Full path of the object relative to repo root
+    pub name: String,
+}
+
+/// [`Index`] represents the whole staging area
+#[derive(Debug, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub struct Index {
+    pub entries: Vec<IndexEntry>,
+}
+
+impl Index {
+    pub fn read_from_conn(conn: &Connection) -> crate::Result<Index> {
+        Ok(conn
+            .query_row(READ_INDEX, (), |row| row.get::<_, String>(0))
+            .optional()?
+            .map(|s| serde_json::from_str(&s))
+            .transpose()?
+            .unwrap_or_default())
+    }
+
+    pub fn persist(&self, conn: &Connection) -> crate::Result<()> {
+        conn.execute("DELETE FROM Index_;", ())?;
+        let s = serde_json::to_string(self)?;
+        conn.execute(INSERT_INDEX, params![s])?;
+        Ok(())
+    }
+
+    pub fn remove(
+        &mut self,
+        path: impl AsRef<Path>,
+        repo_root: impl AsRef<Path>,
+        remove_worktree: bool,
+    ) -> crate::Result<Option<IndexEntry>> {
+        let path = dunce::canonicalize(path)?;
+        let rel_path = path.strip_prefix(repo_root)?.to_string_lossy();
+
+        let Some(idx) = self
+            .entries
+            .iter()
+            .position(|entry| &entry.name == &*rel_path)
+        else {
+            return Ok(None);
+        };
+
+        if remove_worktree {
+            std::fs::remove_file(&path)?;
+        }
+
+        Ok(Some(self.entries.remove(idx)))
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Head {
     Branch(String),
@@ -259,21 +350,16 @@ pub enum Head {
 }
 
 impl Head {
-    pub fn get_current(gitqlite_home: impl AsRef<Path>) -> crate::Result<Head> {
-        let head_path = gitqlite_home.as_ref().join(constants::HEAD_FILE_PREFIX);
-        let f = fs::File::open(&head_path)?;
-        let head = serde_json::from_reader(f)?;
-        Ok(head)
+    pub fn read_from_conn(conn: &Connection) -> crate::Result<Head> {
+        let head = conn.query_row(READ_HEAD, (), |row| row.get::<_, String>(0))?;
+        serde_json::from_str(&head).map_err(anyhow::Error::from)
     }
 
-    pub fn persist(&self, gitqlite_home: impl AsRef<Path>) -> crate::Result<()> {
-        let head_path = gitqlite_home.as_ref().join(constants::HEAD_FILE_PREFIX);
-        let f = fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open(&head_path)?;
-        serde_json::to_writer(f, self)?;
+    pub fn persist(&self, conn: &Connection) -> crate::Result<()> {
+        // Wipe out existing head
+        conn.execute("DELETE FROM Head;", ())?;
+        let s = serde_json::to_string(self)?;
+        conn.execute(INSERT_HEAD, params![s])?;
         Ok(())
     }
 }
@@ -576,6 +662,53 @@ mod tests {
     use rusqlite::params;
 
     use super::*;
+
+    #[test]
+    fn test_sqlite_version() {
+        // We use JSONB to store the JSON data, which requires sqlite to be at least version 3.45.0
+        assert!(rusqlite::version_number() >= 304500)
+    }
+
+    #[test]
+    fn test_index() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute(CREATE_INDEX_TABLE, ()).unwrap();
+
+        let dummy_index = Index::read_from_conn(&conn).unwrap();
+        assert_eq!(Index::default(), dummy_index);
+
+        dummy_index.persist(&conn).unwrap();
+        dummy_index.persist(&conn).unwrap();
+
+        let num_index = conn
+            .query_row("SELECT COUNT(*) FROM Index_;", (), |row| {
+                row.get::<_, i32>(0)
+            })
+            .unwrap();
+        assert_eq!(1, num_index);
+    }
+
+    #[test]
+    fn test_head() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute(CREATE_HEAD_TABLE, ()).unwrap();
+
+        let head = Head::Branch("ref/head/main".to_string());
+        head.persist(&conn).unwrap();
+
+        let another_head =
+            Head::Commit(Sha1Id::try_from("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0").unwrap());
+        another_head.persist(&conn).unwrap();
+
+        let num_head = conn
+            .query_row("SELECT COUNT(*) FROM Head;", (), |row| row.get::<_, i32>(0))
+            .unwrap();
+
+        assert_eq!(1, num_head);
+
+        let current_head = Head::read_from_conn(&conn).unwrap();
+        assert_eq!(another_head, current_head);
+    }
 
     #[test]
     fn test_read_ref_none() {

@@ -7,8 +7,9 @@ use crate::{
     cli::CommitArgs,
     git::{
         config, constants,
-        index::{self, IndexEntry},
-        model::{Commit, Hashable, Head, Ref, Sha1Id, Tree, TreeEntry, TreeEntryType},
+        model::{
+            Commit, Hashable, Head, Index, IndexEntry, Ref, Sha1Id, Tree, TreeEntry, TreeEntryType,
+        },
         utils::{find_gitqlite_root, get_gitqlite_connection},
     },
 };
@@ -47,7 +48,7 @@ pub fn do_commit(arg: CommitArgs) -> crate::Result<()> {
     let (user_email, _) = config::get_config_all(&gitqlite_home, "user.email")?
         .ok_or_else(|| anyhow!("Missing user.email in git config"))?;
 
-    let index = index::read_gitqlite_index(&gitqlite_home)?;
+    let index = Index::read_from_conn(&conn)?;
 
     // trees stores relatvie path -> a list of index entries. We will iteratively build up
     // the git tree for the root repo
@@ -102,7 +103,7 @@ pub fn do_commit(arg: CommitArgs) -> crate::Result<()> {
 
     // Create commit
     // Get the current root commit
-    let head = Head::get_current(&gitqlite_home)?;
+    let head = Head::read_from_conn(&conn)?;
     let root_commit = match &head {
         Head::Branch(branch) => Ref::read_from_conn_with_name(&conn, branch)?.map(|r| r.commit_id),
         Head::Commit(id) => Some(*id),
@@ -135,7 +136,7 @@ pub fn do_commit(arg: CommitArgs) -> crate::Result<()> {
         }
         Head::Commit(_) => {
             let new_head = Head::Commit(commit_id);
-            new_head.persist(&gitqlite_home)?;
+            new_head.persist(&conn)?;
         }
     }
 
