@@ -1,13 +1,12 @@
 use std::fs;
-use std::path::Path;
 
 use anyhow::Context;
 use rusqlite::Connection;
 
 use crate::cli::InitArgs;
-use crate::git::config::{self, initialize_default_config};
 use crate::git::model::Head;
 use crate::git::{constants, model};
+use crate::repo::config::{self, GitConfig};
 
 pub fn do_init(_arg: InitArgs) -> crate::Result<()> {
     let pwd = std::env::current_dir()?;
@@ -29,9 +28,11 @@ pub fn do_init(_arg: InitArgs) -> crate::Result<()> {
 
     let conn = Connection::open(db_path)?;
 
-    initialize_default_config(&gitqlite_home)?;
     initialize_gitqlite_tables(&conn)?;
-    initialize_head(&gitqlite_home, &conn)?;
+
+    let mut config = GitConfig::load(&gitqlite_home)?;
+    initialize_default_config(&mut config)?;
+    initialize_head(&config, &conn)?;
 
     if reinitialize {
         println!(
@@ -64,11 +65,31 @@ fn initialize_gitqlite_tables(conn: &Connection) -> crate::Result<()> {
     Ok(())
 }
 
-fn initialize_head(gitqlite_home: impl AsRef<Path>, conn: &Connection) -> crate::Result<()> {
-    let (default_branch, _) = config::get_config_all(gitqlite_home.as_ref(), "init.defaultBranch")?
-        .expect("Fail to retrieve default branch, please check your system gitconfig");
+fn initialize_head(config: &GitConfig, conn: &Connection) -> crate::Result<()> {
+    let default_branch = config
+        .get("init.defaultBranch", config::ConfigSource::All)?
+        .expect("Fail to retrieve default branch, please check your gitconfig");
     let full_branch_name = format!("{}{}", constants::BRANCH_PREFIX, default_branch);
 
     let head = Head::Branch(full_branch_name);
     head.persist(conn)
+}
+
+pub fn initialize_default_config(config: &mut GitConfig) -> crate::Result<()> {
+    config.set(
+        "core.repositoryformatversion",
+        "0".to_string(),
+        config::ConfigSource::Local,
+    )?;
+    config.set(
+        "core.filemode",
+        "false".to_string(),
+        config::ConfigSource::Local,
+    )?;
+    config.set(
+        "core.bare",
+        "false".to_string(),
+        config::ConfigSource::Local,
+    )?;
+    Ok(())
 }

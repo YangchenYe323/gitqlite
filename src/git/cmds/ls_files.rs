@@ -1,11 +1,10 @@
-
 use chrono::DateTime;
 
 use crate::{
     cli::LsFilesArgs,
     git::{
         model::{Index, ModeType},
-        utils::{get_gitqlite_connection},
+        utils::get_gitqlite_connection,
     },
 };
 

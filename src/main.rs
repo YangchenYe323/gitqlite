@@ -12,6 +12,7 @@ use git::cmds::status::do_status;
 
 mod cli;
 mod git;
+mod repo;
 
 pub type Result<T, E = anyhow::Error> = std::result::Result<T, E>;
 

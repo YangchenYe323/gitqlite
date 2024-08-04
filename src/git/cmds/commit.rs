@@ -6,12 +6,13 @@ use sha1::Digest;
 use crate::{
     cli::CommitArgs,
     git::{
-        config, constants,
+        constants,
         model::{
             Commit, Hashable, Head, Index, IndexEntry, Ref, Sha1Id, Tree, TreeEntry, TreeEntryType,
         },
         utils::{find_gitqlite_root, get_gitqlite_connection},
     },
+    repo::config::{ConfigSource, GitConfig},
 };
 
 #[derive(Debug)]
@@ -42,10 +43,13 @@ pub fn do_commit(arg: CommitArgs) -> crate::Result<()> {
     let repo_root = find_gitqlite_root(std::env::current_dir()?)?;
     let gitqlite_home = repo_root.join(constants::GITQLITE_DIRECTORY_PREFIX);
     let conn = get_gitqlite_connection()?;
+    let config = GitConfig::load(&gitqlite_home)?;
 
-    let (user, _) = config::get_config_all(&gitqlite_home, "user.name")?
+    let user = config
+        .get("user.name", ConfigSource::All)?
         .ok_or_else(|| anyhow!("Missing user.name in git config"))?;
-    let (user_email, _) = config::get_config_all(&gitqlite_home, "user.email")?
+    let user_email = config
+        .get("user.email", ConfigSource::All)?
         .ok_or_else(|| anyhow!("Missing user.email in git config"))?;
 
     let index = Index::read_from_conn(&conn)?;
@@ -118,10 +122,10 @@ pub fn do_commit(arg: CommitArgs) -> crate::Result<()> {
     let commit = Commit::new(
         *root_tree,
         parent_ids,
-        user.clone(),
-        user_email.clone(),
-        user,
-        user_email,
+        user.to_string(),
+        user_email.to_string(),
+        user.to_string(),
+        user_email.to_string(),
         message,
     );
     let commit_id = commit.hash(sha1::Sha1::new());
