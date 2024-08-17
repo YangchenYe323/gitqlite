@@ -40,12 +40,19 @@
 //! and the `sha1` crate for hash computations.
 //!
 
+mod blob;
+mod commit;
+mod hash;
+mod head;
 mod index;
 mod object;
+mod reference;
+mod tree;
 
 use std::fmt;
 
 use anyhow::{anyhow, Context as _};
+use serde::{Deserialize, Serialize};
 
 /// [`IdType`] represents a possible ID state of any object. In reality, object come from two sources:
 /// 1. Top-down from querying the database (e.g., `gitqlite ls-file`).
@@ -60,13 +67,8 @@ pub trait IdType<T>: Copy + fmt::Display {
     fn id(self) -> Self::Id;
 }
 
-/// Generic trait describing any git object that could be hashed and get an ID for.
-pub trait Hashable {
-    fn hash(&self, sha: sha1::Sha1) -> Sha1Id;
-}
-
 /// [`NoId`] represents the state that an object does not have an SHA1 hash yet.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NoId;
 
 impl fmt::Display for NoId {
