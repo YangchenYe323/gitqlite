@@ -3,6 +3,6 @@
 pub mod cmds;
 mod constants;
 mod files;
-mod ignore;
+pub mod ignore;
 mod model;
-mod utils;
+pub mod utils;

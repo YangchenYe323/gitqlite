@@ -1,4 +1,7 @@
 use clap::Parser;
+use gitqlite::git;
+use gitqlite::cli;
+
 use git::cmds::add::do_add;
 use git::cmds::cat_file::do_cat_file;
 use git::cmds::check_ignore::do_check_ignore;
@@ -10,13 +13,7 @@ use git::cmds::ls_files::do_ls_files;
 use git::cmds::rm::do_rm;
 use git::cmds::status::do_status;
 
-mod cli;
-mod git;
-mod repo;
-
-pub type Result<T, E = anyhow::Error> = std::result::Result<T, E>;
-
-fn main() -> Result<()> {
+fn main() -> gitqlite::Result<()> {
     let cli = cli::GitCli::parse();
 
     match cli.command {
