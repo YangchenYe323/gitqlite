@@ -17,14 +17,14 @@
 //! ## Usage
 //!
 //! ```rust
-//! use git_config::GitConfig;
-//! use git_config::ConfigSource;
+//! use gitqlite::repo::config::GitConfig;
+//! use gitqlite::repo::config::ConfigSource;
 //!
-//! fn main() -> std::io::Result<()> {
+//! fn main() -> anyhow::Result<()> {
 //!     // Pass in the path to gitqlite home directory
 //!     let git_config = GitConfig::load("/path/to/repo/.gitqlite")?;
 //!     
-//!     if let Some(user_name) = git_config.get("user.name", ConfigSource::All) {
+//!     if let Some(user_name) = git_config.get("user.name", ConfigSource::All)? {
 //!         println!("Git user name: {}", user_name);
 //!     }
 //!
